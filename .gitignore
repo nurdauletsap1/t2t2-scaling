@@ -1,0 +1,17 @@
+checkpoints/
+results/
+logs/
+__pycache__/
+*.pyc
+*.pyo
+*.egg-info/
+.env
+wandb/
+*.log
+data/
+datasets/
+*.zip
+*.tar.gz
+.vscode/
+.idea/
+*.swp

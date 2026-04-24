@@ -1,0 +1,38 @@
+run_id: sweep_tiny_1000M_s0
+model:
+  size: tiny
+  n_layers: 4
+  hidden_dim: 256
+  n_heads: 4
+  intermediate_dim: 1024
+  max_seq_len: 2048
+  vocab_size: 50257
+  tie_embeddings: true
+training:
+  D_tokens: 1000000000
+  per_gpu_batch_size: 8
+  learning_rate: 0.0005
+  weight_decay: 0.1
+  betas:
+  - 0.9
+  - 0.95
+  warmup_steps: 100
+  val_every_steps: 500
+  early_stopping_patience: 200
+  bf16: true
+  compile: true
+evaluation:
+  k_values:
+  - 1
+  - 4
+  - 8
+  - 16
+  temperature: 0.7
+  top_p: 0.95
+  max_new_tokens: 512
+wandb:
+  project: t2t2-scaling
+  entity: null
+seed: 0
+output_dir: results/
+checkpoint_dir: checkpoints/
