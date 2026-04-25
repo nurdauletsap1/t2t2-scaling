@@ -1,11 +1,13 @@
 """Dataset loading and preprocessing for T2T² experiments."""
 
 import hashlib
+import os
 from typing import Dict, Tuple
 
 import torch
 from datasets import load_dataset, concatenate_datasets, Dataset
 from torch.utils.data import Dataset as TorchDataset
+from tqdm import tqdm
 from transformers import GPT2Tokenizer
 
 
@@ -75,25 +77,32 @@ def load_datasets(config: Dict) -> Tuple[TorchDataset, TorchDataset, TorchDatase
     """
     seed = config["seed"]
     max_seq_len = config["model"]["max_seq_len"]
+    cache_dir = config.get("data", {}).get("cache_dir", "/workspace/.cache/huggingface")
+    max_samples = config.get("data", {}).get("max_samples", None)
+    os.makedirs(cache_dir, exist_ok=True)
 
     tokenizer = GPT2Tokenizer.from_pretrained("gpt2")
     tokenizer.pad_token = tokenizer.eos_token
 
     # ── Load raw datasets ──────────────────────────────────────────────────
-    gsm8k = load_dataset("gsm8k", "main")
+    gsm8k = load_dataset("gsm8k", "main", cache_dir=cache_dir)
     try:
-        _full = load_dataset("AI-MO/NuminaMath-CoT", split="train")
+        _full = load_dataset("AI-MO/NuminaMath-CoT", split="train", cache_dir=cache_dir)
         print(f"Loaded NuminaMath-CoT: {len(_full)} problems")
     except Exception as _e1:
         try:
-            _full = load_dataset("nvidia/OpenMathReasoning", split="train")
+            _full = load_dataset("nvidia/OpenMathReasoning", split="train", cache_dir=cache_dir)
             print(f"Loaded OpenMathReasoning: {len(_full)} problems")
         except Exception as _e2:
             raise RuntimeError(f"Could not load math dataset: {_e1}, fallback: {_e2}")
 
+    if max_samples:
+        _full = _full.select(range(min(max_samples, len(_full))))
+        print(f"Debug mode: using {len(_full)} samples")
+
     # Deduplicate by problem text (NuminaMath-CoT has same problem with multiple solutions)
     _unique: dict = {}
-    for _item in _full:
+    for _item in tqdm(_full, desc="Deduplicating"):
         _h = _hash_text(_item["problem"])
         if _h not in _unique:
             _unique[_h] = _item
