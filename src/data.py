@@ -81,20 +81,22 @@ def load_datasets(config: Dict) -> Tuple[TorchDataset, TorchDataset, TorchDatase
 
     # ── Load raw datasets ──────────────────────────────────────────────────
     gsm8k = load_dataset("gsm8k", "main")
-    math_ds = None
-    for _name in ["hendrycks/math", "EleutherAI/MATH", "hendrycks/competition_math", "competition_math"]:
+    try:
+        _full = load_dataset("AI-MO/NuminaMath-CoT", split="train")
+        print(f"Loaded NuminaMath-CoT: {len(_full)} problems")
+        math_train = _full.select(range(len(_full) - 5000))
+        math_test = _full.select(range(len(_full) - 5000, len(_full)))
+    except Exception as _e1:
         try:
-            math_ds = load_dataset(_name)
-            print(f"Loaded MATH from: {_name}")
-            break
-        except Exception as _e:
-            print(f"Failed {_name}: {_e}")
-            continue
-    if math_ds is None:
-        raise RuntimeError("Could not load MATH dataset from any known source")
+            _full = load_dataset("nvidia/OpenMathReasoning", split="train")
+            print(f"Loaded OpenMathReasoning: {len(_full)} problems")
+            math_train = _full.select(range(len(_full) - 5000))
+            math_test = _full.select(range(len(_full) - 5000, len(_full)))
+        except Exception as _e2:
+            raise RuntimeError(f"Could not load math dataset: {_e1}, fallback: {_e2}")
 
-    # ── Build test set (MATH test only) ───────────────────────────────────
-    math_test_raw = math_ds["test"]
+    # ── Build test set (math test split) ─────────────────────────────────
+    math_test_raw = math_test
     test_texts = [
         _format_example(ex["problem"], ex["solution"])
         for ex in math_test_raw
@@ -108,7 +110,7 @@ def load_datasets(config: Dict) -> Tuple[TorchDataset, TorchDataset, TorchDatase
     ]
     math_train_texts = [
         _format_example(ex["problem"], ex["solution"])
-        for ex in math_ds["train"]
+        for ex in math_train
     ]
 
     # 50/50 interleaved by index
@@ -125,7 +127,7 @@ def load_datasets(config: Dict) -> Tuple[TorchDataset, TorchDataset, TorchDatase
     train_hashes = set()
     for ex in gsm8k["train"]:
         train_hashes.add(_hash_text(ex["question"]))
-    for ex in math_ds["train"]:
+    for ex in math_train:
         train_hashes.add(_hash_text(ex["problem"]))
 
     overlap = test_hashes & train_hashes
