@@ -24,8 +24,8 @@ def _get_lr(config: Dict) -> float:
     """
     size = config["model"].get("size", "tiny")
     if size in ("tiny", "small"):
-        return config["training"].get("learning_rate", 5e-4)
-    return config["training"].get("learning_rate", 3e-4)
+        return float(config["training"].get("learning_rate", 5e-4))
+    return float(config["training"].get("learning_rate", 3e-4))
 
 
 def _save_checkpoint(
