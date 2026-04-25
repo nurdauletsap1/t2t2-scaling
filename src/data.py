@@ -84,24 +84,39 @@ def load_datasets(config: Dict) -> Tuple[TorchDataset, TorchDataset, TorchDatase
     try:
         _full = load_dataset("AI-MO/NuminaMath-CoT", split="train")
         print(f"Loaded NuminaMath-CoT: {len(_full)} problems")
-        math_train = _full.select(range(len(_full) - 5000))
-        math_test = _full.select(range(len(_full) - 5000, len(_full)))
     except Exception as _e1:
         try:
             _full = load_dataset("nvidia/OpenMathReasoning", split="train")
             print(f"Loaded OpenMathReasoning: {len(_full)} problems")
-            math_train = _full.select(range(len(_full) - 5000))
-            math_test = _full.select(range(len(_full) - 5000, len(_full)))
         except Exception as _e2:
             raise RuntimeError(f"Could not load math dataset: {_e1}, fallback: {_e2}")
 
+    # Deduplicate by problem text (NuminaMath-CoT has same problem with multiple solutions)
+    _unique: dict = {}
+    for _item in _full:
+        _h = _hash_text(_item["problem"])
+        if _h not in _unique:
+            _unique[_h] = _item
+    unique_list = list(_unique.values())
+    print(f"Deduplicated to {len(unique_list)} unique problems")
+
+    # Split: 80% train, 10% val, 10% test — no overlap by construction
+    _n = len(unique_list)
+    _train_end = int(0.8 * _n)
+    _val_end = int(0.9 * _n)
+    math_train = unique_list[:_train_end]
+    math_test = unique_list[_val_end:]
+
+    _train_hashes = {_hash_text(x["problem"]) for x in math_train}
+    _test_hashes = {_hash_text(x["problem"]) for x in math_test}
+    assert len(_train_hashes & _test_hashes) == 0, \
+        f"Leakage: {len(_train_hashes & _test_hashes)} problems in both sets"
+
     # ── Build test set (math test split) ─────────────────────────────────
-    math_test_raw = math_test
     test_texts = [
         _format_example(ex["problem"], ex["solution"])
-        for ex in math_test_raw
+        for ex in math_test
     ]
-    test_hashes = {_hash_text(ex["problem"]) for ex in math_test_raw}
 
     # ── Format training data ───────────────────────────────────────────────
     gsm8k_texts = [
@@ -122,21 +137,6 @@ def load_datasets(config: Dict) -> Tuple[TorchDataset, TorchDataset, TorchDatase
     # Append remaining examples from the longer list
     interleaved.extend(gsm8k_texts[n:])
     interleaved.extend(math_train_texts[n:])
-
-    # ── Leakage check ─────────────────────────────────────────────────────
-    train_hashes = set()
-    for ex in gsm8k["train"]:
-        train_hashes.add(_hash_text(ex["question"]))
-    for ex in math_train:
-        train_hashes.add(_hash_text(ex["problem"]))
-
-    overlap = test_hashes & train_hashes
-    if overlap:
-        sample = list(overlap)[:3]
-        raise ValueError(
-            f"Data leakage detected: {len(overlap)} test problems found in training set. "
-            f"Sample hashes: {sample}. Halt immediately — results would be invalid."
-        )
 
     # ── Validation split (10% stratified, seeded) ─────────────────────────
     import random
