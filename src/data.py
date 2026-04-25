@@ -81,7 +81,18 @@ def load_datasets(config: Dict) -> Tuple[TorchDataset, TorchDataset, TorchDatase
 
     # ── Load raw datasets ──────────────────────────────────────────────────
     gsm8k = load_dataset("gsm8k", "main")
-    math_ds = load_dataset("hendrycks/competition_math")
+    math_ds = None
+    for _name in ["hendrycks/competition_math", "hendrycks/math", "EleutherAI/MATH"]:
+        try:
+            math_ds = load_dataset(_name)
+            break
+        except Exception:
+            continue
+    if math_ds is None:
+        raise RuntimeError(
+            "Could not load MATH dataset from any known Hub identifier: "
+            "hendrycks/competition_math, hendrycks/math, EleutherAI/MATH"
+        )
 
     # ── Build test set (MATH test only) ───────────────────────────────────
     math_test_raw = math_ds["test"]
